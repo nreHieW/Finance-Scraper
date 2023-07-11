@@ -1,0 +1,5 @@
+aiohttp==3.8.3
+beautifulsoup4==4.12.2
+gspread==5.10.0
+pandas==1.5.3
+yfinance==0.2.22

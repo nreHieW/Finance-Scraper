@@ -6,8 +6,29 @@ import aiohttp
 import asyncio
 import os
 import gspread
+import requests
+from pymongo.mongo_client import MongoClient
+from pymongo.server_api import ServerApi
+import numpy as np
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from concurrent.futures import ThreadPoolExecutor
+
+
+# https://stackoverflow.com/questions/30098263/inserting-a-document-with-pymongo-invaliddocument-cannot-encode-object
+class CustomEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return super(CustomEncoder, self).default(obj)
+
 
 MAX_WORKERS = 10
 header = {"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36"}
@@ -138,9 +159,11 @@ if __name__ == "__main__":
 
     wb = gc.open("Stock Analysis")
     data_sheet = wb.worksheet("Data")
-    tickers = data_sheet.col_values(1)[1:]
-    tickers = [x.upper() for x in tickers]
-    tickers = list(set(tickers))
+    url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt"
+    response = requests.get(url)
+    file_content = response.text
+    tickers = file_content.split("\n")
+    print("Number of tickers:", len(tickers))
 
     found_links = get_marketscreener_links(tickers)
     marketscreener_df = parse_marketscreener(found_links)
@@ -154,3 +177,11 @@ if __name__ == "__main__":
     df.fillna(0, inplace=True)
     data_sheet.clear()
     data_sheet.update([df.columns.values.tolist()] + df.values.tolist())
+
+    uri = f"mongodb+srv://{os.getenv('MONGODB_USERNAME')}:{os.getenv('MONGODB_DB_PASSWORD')}@{os.getenv('MONGODB_DB_NAME')}.g29k6mj.mongodb.net/?retryWrites=true&w=majority&appName={os.getenv('MONGODB_DB_NAME')}"
+    client = MongoClient(uri, server_api=ServerApi("1"))
+    db = client[os.getenv("MONGODB_DB_NAME")]["financials"]
+    data = df.to_dict(orient="records")
+    data = json.loads(json.dumps(data, cls=CustomEncoder))
+    for record in data:
+        db.update_one({"Ticker": record["Ticker"]}, {"$set": record}, upsert=True)

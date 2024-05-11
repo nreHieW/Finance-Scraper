@@ -1,5 +1,10 @@
 aiohttp==3.8.3
-beautifulsoup4==4.12.2
-gspread==5.10.0
+beautifulsoup4==4.12.3
+gspread==6.1.0
+numpy==1.24.3
 pandas==1.5.3
-yfinance
+pymongo==4.7.2
+python-dotenv==1.0.1
+Requests==2.31.0
+sentence_transformers==2.7.0
+yfinance==0.2.38

@@ -34,25 +34,20 @@ MAX_WORKERS = 10
 header = {"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36"}
 
 
-async def fetch_html(url):
-    async with aiohttp.ClientSession(headers=header, trust_env=True) as session:
-        async with session.get(url) as response:
-            html = await response.text()
-            return html
+def fetch_html(url):
+    response = requests.get(url, headers=header)
+    return response.text
 
 
-async def get_htmls(urls):
-    tasks = [fetch_html(url) for url in urls]
-    html_responses = await asyncio.gather(*tasks)
+def get_htmls(urls):
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        html_responses = list(executor.map(fetch_html, urls))
     return html_responses
 
 
 def get_marketscreener_links(tickers):
-
-    # Use ticker as the search query
     search_queries = ["https://www.marketscreener.com/search/?q=" + "+".join(x.split()) for x in tickers]
-    found_htmls = asyncio.run(get_htmls(search_queries))
-
+    found_htmls = get_htmls(search_queries)
     links = {}
     for ticker, html in zip(tickers, found_htmls):
         soup = BeautifulSoup(html, features="lxml")
@@ -69,9 +64,8 @@ def get_marketscreener_links(tickers):
 
 
 def parse_marketscreener(marketscreener_urls):
-    htmls = asyncio.run(get_htmls(marketscreener_urls.values()))
+    htmls = get_htmls(list(marketscreener_urls.values()))
     htmls = dict(zip(marketscreener_urls.keys(), htmls))
-
     dfs = []
     for ticker, html in htmls.items():
         soup = BeautifulSoup(html, features="lxml")
@@ -83,7 +77,6 @@ def parse_marketscreener(marketscreener_urls):
                 income_statement.iloc[:, 0] = income_statement.iloc[:, 0].str.replace(r"\d", "", regex=True)
                 income_statement.set_index(income_statement.columns[0], inplace=True)
                 income_statement.index = income_statement.index.str.strip()
-
                 indiv = income_statement.loc[["Net sales", "Net income", "EBITDA", "EBIT"]]
                 indiv = indiv.stack()
                 indiv.index = [" ".join(x) for x in indiv.index]
@@ -93,7 +86,6 @@ def parse_marketscreener(marketscreener_urls):
                 indiv["Ticker"] = ticker
                 dfs.append(indiv)
                 break
-
     marketscreener = pd.concat(dfs, axis=0, join="outer", ignore_index=True)
     return marketscreener.reset_index(drop=True).fillna(0).set_index("Ticker")
 
@@ -153,12 +145,17 @@ def parse_finviz(tickers):
 
 if __name__ == "__main__":
 
-    cred = json.loads(os.environ.get("GOOGLE_CREDS"))
+    # cred = json.loads(os.environ.get("GOOGLE_CREDS"))
+    # gc = gspread.service_account_from_dict(cred)
+    # wb = gc.open(os.environ.get("GOOGLE_SHEET_NAME"))
+
+    with open("/Users/weihern/Documents/Computing Projects/Experiments/Finance-Scraper/finance-392001-06a7321c7e2f.json", "r") as f:
+        cred = json.load(f)
     gc = gspread.service_account_from_dict(cred)
-    wb = gc.open(os.environ.get("GOOGLE_SHEET_NAME"))
 
     wb = gc.open("Stock Analysis")
     data_sheet = wb.worksheet("Data")
+
     url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt"
     response = requests.get(url)
     file_content = response.text

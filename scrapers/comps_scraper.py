@@ -35,7 +35,7 @@ header = {"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/5
 
 
 async def fetch_html(url):
-    async with aiohttp.ClientSession(headers=header) as session:
+    async with aiohttp.ClientSession(headers=header, trust_env=True) as session:
         async with session.get(url) as response:
             html = await response.text()
             return html

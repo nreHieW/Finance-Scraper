@@ -145,15 +145,10 @@ def parse_finviz(tickers):
 
 if __name__ == "__main__":
 
-    # cred = json.loads(os.environ.get("GOOGLE_CREDS"))
-    # gc = gspread.service_account_from_dict(cred)
-    # wb = gc.open(os.environ.get("GOOGLE_SHEET_NAME"))
-
-    with open("/Users/weihern/Documents/Computing Projects/Experiments/Finance-Scraper/finance-392001-06a7321c7e2f.json", "r") as f:
-        cred = json.load(f)
+    cred = json.loads(os.environ.get("GOOGLE_CREDS"))
     gc = gspread.service_account_from_dict(cred)
+    wb = gc.open(os.environ.get("GOOGLE_SHEET_NAME"))
 
-    wb = gc.open("Stock Analysis")
     data_sheet = wb.worksheet("Data")
 
     url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt"

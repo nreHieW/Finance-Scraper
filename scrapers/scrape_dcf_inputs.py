@@ -20,6 +20,8 @@ warnings.filterwarnings("ignore")
 
 headers = {"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36"}
 
+MAX_WORKERS = 100
+
 
 # https://stackoverflow.com/questions/30098263/inserting-a-document-with-pymongo-invaliddocument-cannot-encode-object
 class CustomEncoder(json.JSONEncoder):
@@ -309,7 +311,7 @@ def main():
     client = MongoClient(uri, server_api=ServerApi("1"))
     db = client[os.getenv("MONGODB_DB_NAME")]["dcf_inputs"]
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = []
         for ticker in tickers:
             future = executor.submit(process_ticker, ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, db)

@@ -94,22 +94,40 @@ def parse_marketscreener(marketscreener_urls):
 
 
 def get_info(ticker):
-    ticker_info = yf.Ticker(ticker).info
-    return {
-        "Ticker": ticker,
-        "Name": ticker_info.get("longName"),
-        "Market Cap": ticker_info.get("marketCap"),
-        "Sector": ticker_info.get("sector"),
-        "Summary": ticker_info.get("longBusinessSummary"),
-        "Industry": ticker_info.get("industry"),
-        "Shares Outstanding": ticker_info.get("sharesOutstanding"),
-        "Institution Ownership": ticker_info.get("heldPercentInstitutions"),
-        "Price": ticker_info.get("currentPrice"),
-        "52-Week High": ticker_info.get("fiftyTwoWeekHigh"),
-        "52-Week Low": ticker_info.get("fiftyTwoWeekLow"),
-        "Enterprise Value": ticker_info.get("enterpriseValue"),
-        "Beta": ticker_info.get("beta"),
-    }
+    try:
+        ticker_info = yf.Ticker(ticker).info
+        return {
+            "Ticker": ticker,
+            "Name": ticker_info.get("longName"),
+            "Market Cap": ticker_info.get("marketCap"),
+            "Sector": ticker_info.get("sector"),
+            "Summary": ticker_info.get("longBusinessSummary"),
+            "Industry": ticker_info.get("industry"),
+            "Shares Outstanding": ticker_info.get("sharesOutstanding"),
+            "Institution Ownership": ticker_info.get("heldPercentInstitutions"),
+            "Price": ticker_info.get("currentPrice"),
+            "52-Week High": ticker_info.get("fiftyTwoWeekHigh"),
+            "52-Week Low": ticker_info.get("fiftyTwoWeekLow"),
+            "Enterprise Value": ticker_info.get("enterpriseValue"),
+            "Beta": ticker_info.get("beta"),
+        }
+    except Exception as e:
+        print("Error fetching", ticker, e)
+        return {
+            "Ticker": ticker,
+            "Name": 0,
+            "Market Cap": 0,
+            "Sector": 0,
+            "Summary": 0,
+            "Industry": 0,
+            "Shares Outstanding": 0,
+            "Institution Ownership": 0,
+            "Price": 0,
+            "52-Week High": 0,
+            "52-Week Low": 0,
+            "Enterprise Value": 0,
+            "Beta": 0,
+        }
 
 
 def get_and_parse_yahoo(tickers):
@@ -132,17 +150,20 @@ def parse_finviz(tickers):
     ]
     dfs = []
     for i, html in enumerate(htmls):
-        soup = BeautifulSoup(html, "lxml")
-        table = soup.find("table", class_="snapshot-table2")
-        if table:
-            df = pd.read_html(str(table))[0].iloc[:, -2:].set_index(10)
-            df[11] = df[11].str.replace("%", "")
-            perf_values = df.loc[perf_columns].astype(float).T.reset_index(drop=True)
-            indiv = pd.DataFrame(perf_values, columns=perf_columns)
-        else:
-            indiv = pd.DataFrame([[0] * len(perf_columns)], columns=perf_columns)
-        indiv["Ticker"] = tickers[i]
-        dfs.append(indiv)
+        try:
+            soup = BeautifulSoup(html, "lxml")
+            table = soup.find("table", class_="snapshot-table2")
+            if table:
+                df = pd.read_html(str(table))[0].iloc[:, -2:].set_index(10)
+                df[11] = df[11].str.replace("%", "")
+                perf_values = df.loc[perf_columns].astype(float).T.reset_index(drop=True)
+                indiv = pd.DataFrame(perf_values, columns=perf_columns)
+            else:
+                indiv = pd.DataFrame([[0] * len(perf_columns)], columns=perf_columns)
+            indiv["Ticker"] = tickers[i]
+            dfs.append(indiv)
+        except Exception as e:
+            print("Error parsing", tickers[i], e)
     return pd.concat(dfs, axis=0, ignore_index=True).set_index("Ticker")
 
 

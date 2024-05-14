@@ -12,6 +12,7 @@ from pymongo.server_api import ServerApi
 from dotenv import load_dotenv
 import os
 import json
+import concurrent.futures
 
 load_dotenv()
 
@@ -308,14 +309,31 @@ def main():
     client = MongoClient(uri, server_api=ServerApi("1"))
     db = client[os.getenv("MONGODB_DB_NAME")]["dcf_inputs"]
 
-    for ticker in tickers:
-        url = get_marketscreener_url(ticker)
-        if url is None:
-            continue
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = []
+        for ticker in tickers:
+            future = executor.submit(process_ticker, ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, db)
+            futures.append(future)
+
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                print(future.result())
+            except Exception as e:
+                print(f"[ERROR] - {e}")
+
+
+def process_ticker(ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, db):
+    url = get_marketscreener_url(ticker)
+    if url is None:
+        return f"[INFO] Could not find URL for {ticker}"
+    try:
         dcf_inputs = get_dcf_inputs(ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate)
         dcf_inputs = json.dumps(dcf_inputs, cls=CustomEncoder)
         dcf_inputs = json.loads(dcf_inputs)
         db.update_one({"Ticker": ticker}, {"$set": dcf_inputs}, upsert=True)
+        return f"[SUCCESS] {ticker} - DCF inputs updated"
+    except Exception as e:
+        return f"[ERROR] {ticker} - {e}"
 
 
 if __name__ == "__main__":

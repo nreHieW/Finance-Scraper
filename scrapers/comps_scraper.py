@@ -30,7 +30,7 @@ class CustomEncoder(json.JSONEncoder):
             return super(CustomEncoder, self).default(obj)
 
 
-MAX_WORKERS = 10
+MAX_WORKERS = 100
 header = {"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36"}
 
 
@@ -68,24 +68,27 @@ def parse_marketscreener(marketscreener_urls):
     htmls = dict(zip(marketscreener_urls.keys(), htmls))
     dfs = []
     for ticker, html in htmls.items():
-        soup = BeautifulSoup(html, features="lxml")
-        for div in soup.find_all("div", {"class": "card card--collapsible mb-15"}):
-            header_text = div.find("div", {"class": "card-header"}).text.lower()
-            if "income statement" in header_text and "annual" in header_text:
-                income_statement = pd.read_html(str(div.find("table")))[0]
-                income_statement = income_statement.dropna(axis=1, how="all")
-                income_statement.iloc[:, 0] = income_statement.iloc[:, 0].str.replace(r"\d", "", regex=True)
-                income_statement.set_index(income_statement.columns[0], inplace=True)
-                income_statement.index = income_statement.index.str.strip()
-                indiv = income_statement.loc[["Net sales", "Net income", "EBITDA", "EBIT"]]
-                indiv = indiv.stack()
-                indiv.index = [" ".join(x) for x in indiv.index]
-                indiv = indiv.to_frame().T
-                indiv["Currency"] = div.find_all("sup")[0].attrs["title"].strip().split()[0]
-                indiv["Unit"] = div.find_all("sup")[0].attrs["title"].strip().split()[-1]
-                indiv["Ticker"] = ticker
-                dfs.append(indiv)
-                break
+        try:
+            soup = BeautifulSoup(html, features="lxml")
+            for div in soup.find_all("div", {"class": "card card--collapsible mb-15"}):
+                header_text = div.find("div", {"class": "card-header"}).text.lower()
+                if "income statement" in header_text and "annual" in header_text:
+                    income_statement = pd.read_html(str(div.find("table")))[0]
+                    income_statement = income_statement.dropna(axis=1, how="all")
+                    income_statement.iloc[:, 0] = income_statement.iloc[:, 0].str.replace(r"\d", "", regex=True)
+                    income_statement.set_index(income_statement.columns[0], inplace=True)
+                    income_statement.index = income_statement.index.str.strip()
+                    indiv = income_statement.loc[["Net sales", "Net income", "EBITDA", "EBIT"]]
+                    indiv = indiv.stack()
+                    indiv.index = [" ".join(x) for x in indiv.index]
+                    indiv = indiv.to_frame().T
+                    indiv["Currency"] = div.find_all("sup")[0].attrs["title"].strip().split()[0]
+                    indiv["Unit"] = div.find_all("sup")[0].attrs["title"].strip().split()[-1]
+                    indiv["Ticker"] = ticker
+                    dfs.append(indiv)
+                    break
+        except Exception as e:
+            print("Error parsing", ticker, e)
     marketscreener = pd.concat(dfs, axis=0, join="outer", ignore_index=True)
     return marketscreener.reset_index(drop=True).fillna(0).set_index("Ticker")
 

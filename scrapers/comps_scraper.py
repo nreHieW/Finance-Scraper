@@ -2,8 +2,6 @@ import yfinance as yf
 import pandas as pd
 from bs4 import BeautifulSoup
 import json
-import aiohttp
-import asyncio
 import os
 import gspread
 import requests
@@ -139,7 +137,7 @@ def get_and_parse_yahoo(tickers):
 
 def parse_finviz(tickers):
     finviz_urls = ["https://finviz.com/quote.ashx?t=" + x for x in tickers]
-    htmls = asyncio.run(get_htmls(finviz_urls))
+    htmls = get_htmls(finviz_urls)
     perf_columns = [
         "Perf Week",
         "Perf Month",

@@ -112,7 +112,7 @@ def get_info(ticker):
             "Beta": ticker_info.get("beta"),
         }
     except Exception as e:
-        print("Error fetching", ticker, e)
+        # print("Error fetching", ticker, e)
         return {
             "Ticker": ticker,
             "Name": 0,

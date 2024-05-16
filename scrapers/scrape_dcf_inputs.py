@@ -316,7 +316,7 @@ def main():
         futures = []
         for i, ticker in enumerate(tickers):
             if i > 0 and i % MAX_WORKERS == 0:
-                time.sleep(20)
+                time.sleep(1)
             future = executor.submit(process_ticker, ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, db)
             futures.append(future)
 

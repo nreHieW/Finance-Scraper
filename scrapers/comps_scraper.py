@@ -44,7 +44,7 @@ def get_htmls(urls):
         batch = urls[i : i + MAX_WORKERS]
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             html_responses.extend(list(executor.map(fetch_html, batch)))
-        time.sleep(20)
+        time.sleep(1)
     return html_responses
 
 

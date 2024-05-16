@@ -297,6 +297,7 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
         "extras": {
             "regional_revenues": regional_revenues,
             "industry": industry,
+            "historical_revenue_growth": info.get("revenueGrowth", 0),
         },
     }
 
@@ -315,7 +316,7 @@ def main():
     risk_free_rate = get_10year_tbill()
     mature_erp = get_mature_erp()
 
-    uri = f"mongodb+srv://{os.getenv('MONGODB_USERNAME')}:{os.getenv('MONGODB_DB_PASSWORD')}@{os.getenv('MONGODB_DB_NAME')}.g29k6mj.mongodb.net/?retryWrites=true&w=majority&appName={os.getenv('MONGODB_DB_NAME')}"
+    uri = f"mongodb+srv://{os.getenv('MONGODB_USERNAME')}:{os.getenv('MONGODB_DB_PASSWORD')}@{os.getenv('MONGODB_DB_NAME')}.kdnx4hj.mongodb.net/?retryWrites=true&w=majority&appName={os.getenv('MONGODB_DB_NAME')}"
     client = MongoClient(uri, server_api=ServerApi("1"))
     db = client[os.getenv("MONGODB_DB_NAME")]["dcf_inputs"]
 

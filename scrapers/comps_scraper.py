@@ -203,7 +203,7 @@ if __name__ == "__main__":
     except Exception as e:
         print("[ERROR] Failed to update Google Sheet", e)
 
-    uri = f"mongodb+srv://{os.getenv('MONGODB_USERNAME')}:{os.getenv('MONGODB_DB_PASSWORD')}@{os.getenv('MONGODB_DB_NAME')}.g29k6mj.mongodb.net/?retryWrites=true&w=majority&appName={os.getenv('MONGODB_DB_NAME')}"
+    uri = f"mongodb+srv://{os.getenv('MONGODB_USERNAME')}:{os.getenv('MONGODB_DB_PASSWORD')}@{os.getenv('MONGODB_DB_NAME')}.kdnx4hj.mongodb.net/?retryWrites=true&w=majority&appName={os.getenv('MONGODB_DB_NAME')}"
     client = MongoClient(uri, server_api=ServerApi("1"))
     db = client[os.getenv("MONGODB_DB_NAME")]["financials"]
     data = df.to_dict(orient="records")

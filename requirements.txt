@@ -8,3 +8,4 @@ python-dotenv==1.0.1
 requests[security]
 sentence_transformers==2.7.0
 yfinance==0.2.38
+openpyxl

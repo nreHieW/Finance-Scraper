@@ -21,7 +21,7 @@ warnings.filterwarnings("ignore")
 
 headers = {"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36"}
 
-MAX_WORKERS = 100
+MAX_WORKERS = 120
 
 
 # https://stackoverflow.com/questions/30098263/inserting-a-document-with-pymongo-invaliddocument-cannot-encode-object

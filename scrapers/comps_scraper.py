@@ -29,7 +29,7 @@ class CustomEncoder(json.JSONEncoder):
             return super(CustomEncoder, self).default(obj)
 
 
-MAX_WORKERS = 100
+MAX_WORKERS = 120
 header = {"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36"}
 
 
@@ -95,7 +95,7 @@ def parse_marketscreener(marketscreener_urls):
                     dfs.append(indiv)
                     break
         except Exception as e:
-            print("Error parsing", ticker, e)
+            print("[ERROR] Failed to parse Marketscreener", ticker, e)
     marketscreener = pd.concat(dfs, axis=0, join="outer", ignore_index=True)
     return marketscreener.reset_index(drop=True).fillna(0).set_index("Ticker")
 
@@ -119,7 +119,6 @@ def get_info(ticker):
             "Beta": ticker_info.get("beta"),
         }
     except Exception as e:
-        # print("Error fetching", ticker, e)
         return {
             "Ticker": ticker,
             "Name": 0,
@@ -170,7 +169,7 @@ def parse_finviz(tickers):
             indiv["Ticker"] = tickers[i]
             dfs.append(indiv)
         except Exception as e:
-            print("Error parsing", tickers[i], e)
+            print("[ERROR] Failed to parse Finviz", tickers[i], e)
     return pd.concat(dfs, axis=0, ignore_index=True).set_index("Ticker")
 
 
@@ -198,12 +197,14 @@ if __name__ == "__main__":
     df.reset_index(inplace=True)
     df.sort_values("Ticker", inplace=True)
     df.fillna(0, inplace=True)
-    data_sheet.clear()
-    data_sheet.update([df.columns.values.tolist()] + df.values.tolist())
+    try:
+        data_sheet.clear()
+        data_sheet.update([df.columns.values.tolist()] + df.values.tolist())
+    except Exception as e:
+        print("[ERROR] Failed to update Google Sheet", e)
 
     uri = f"mongodb+srv://{os.getenv('MONGODB_USERNAME')}:{os.getenv('MONGODB_DB_PASSWORD')}@{os.getenv('MONGODB_DB_NAME')}.g29k6mj.mongodb.net/?retryWrites=true&w=majority&appName={os.getenv('MONGODB_DB_NAME')}"
     client = MongoClient(uri, server_api=ServerApi("1"))
-    print(os.getenv("MONGODB_DB_NAME"))
     db = client[os.getenv("MONGODB_DB_NAME")]["financials"]
     data = df.to_dict(orient="records")
     data = json.loads(json.dumps(data, cls=CustomEncoder))

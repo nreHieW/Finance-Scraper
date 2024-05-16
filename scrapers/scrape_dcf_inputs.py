@@ -232,6 +232,7 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     last_balance_sheet = ticker.quarterly_balance_sheet
     last_balance_sheet = last_balance_sheet[last_balance_sheet.columns[:4]].T
     info = ticker.info
+    name = info.get("longName")
 
     revenues = ttm_income_statement.get("Operating Revenue", pd.Series([0] * len(ttm_income_statement))).sum()
     interest_expense = ttm_income_statement.get("Interest Expense", pd.Series([0] * len(ttm_income_statement))).sum()
@@ -265,6 +266,7 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     sales_to_capital_ratio_early = curr_sales_to_capital_ratio
     sales_to_capital_ratio_steady = avg_metrics["Sales/Capital"][industry]
     return {
+        "name": name,
         "revenues": revenues,
         "interest_expense": interest_expense,
         "book_value_of_equity": book_value_of_equity,

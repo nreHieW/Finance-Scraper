@@ -34,7 +34,11 @@ header = {"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/5
 
 
 def fetch_html(url):
-    response = requests.get(url, headers=header)
+    try:
+        response = requests.get(url, headers=header)
+    except Exception as e:
+        time.sleep(10)
+        response = requests.get(url, headers=header)
     return response.text
 
 
@@ -199,6 +203,7 @@ if __name__ == "__main__":
 
     uri = f"mongodb+srv://{os.getenv('MONGODB_USERNAME')}:{os.getenv('MONGODB_DB_PASSWORD')}@{os.getenv('MONGODB_DB_NAME')}.g29k6mj.mongodb.net/?retryWrites=true&w=majority&appName={os.getenv('MONGODB_DB_NAME')}"
     client = MongoClient(uri, server_api=ServerApi("1"))
+    print(os.getenv("MONGODB_DB_NAME"))
     db = client[os.getenv("MONGODB_DB_NAME")]["financials"]
     data = df.to_dict(orient="records")
     data = json.loads(json.dumps(data, cls=CustomEncoder))

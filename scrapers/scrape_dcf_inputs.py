@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 import os
 import json
 import concurrent.futures
+import time
 
 load_dotenv()
 
@@ -313,7 +314,9 @@ def main():
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = []
-        for ticker in tickers:
+        for i, ticker in enumerate(tickers):
+            if i > 0 and i % MAX_WORKERS == 0:
+                time.sleep(20)
             future = executor.submit(process_ticker, ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, db)
             futures.append(future)
 

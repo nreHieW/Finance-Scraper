@@ -9,6 +9,7 @@ from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 import numpy as np
 from dotenv import load_dotenv
+import time
 
 load_dotenv()
 
@@ -38,8 +39,12 @@ def fetch_html(url):
 
 
 def get_htmls(urls):
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        html_responses = list(executor.map(fetch_html, urls))
+    html_responses = []
+    for i in range(0, len(urls), MAX_WORKERS):
+        batch = urls[i : i + MAX_WORKERS]
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            html_responses.extend(list(executor.map(fetch_html, batch)))
+        time.sleep(20)
     return html_responses
 
 

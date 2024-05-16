@@ -258,8 +258,9 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     pre_tax_cost_of_debt = risk_free_rate + company_spread + country_erps[regions[0]]
 
     revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate = get_revenue_forecasts(info["symbol"], marketscreener_url)
-    operating_margin_next_year = ttm_income_statement["EBIT"].mean() / revenues
+    operating_margin_next_year = ttm_income_statement["Operating Income"].sum() / revenues
     target_pre_tax_operating_margin = avg_metrics["Pre-tax Operating Margin (Unadjusted)"][industry]
+    target_pre_tax_operating_margin = max(target_pre_tax_operating_margin, operating_margin_next_year)
     year_of_convergence_for_margin = 5
     years_of_high_growth = 5
     curr_sales_to_capital_ratio = revenues / (book_value_of_equity + book_value_of_debt - cash_and_marketable_securities - cross_holdings_and_other_non_operating_assets)
@@ -293,6 +294,10 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
         "years_of_high_growth": years_of_high_growth,
         "sales_to_capital_ratio_early": sales_to_capital_ratio_early,
         "sales_to_capital_ratio_steady": sales_to_capital_ratio_steady,
+        "extras": {
+            "regional_revenues": regional_revenues,
+            "industry": industry,
+        },
     }
 
 

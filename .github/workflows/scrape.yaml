@@ -19,14 +19,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
   
-      - name: Run the scraping script for comps
-        env: 
-          GOOGLE_CREDS: ${{ secrets.GOOGLE_CREDS }}
-          GOOGLE_SHEET_NAME: ${{ secrets.GOOGLE_SHEET_NAME }}
-          MONGODB_USERNAME: ${{ secrets.MONGODB_USERNAME }}
-          MONGODB_DB_PASSWORD: ${{ secrets.MONGODB_DB_PASSWORD }}
-          MONGODB_DB_NAME: ${{ secrets.MONGODB_DB_NAME }}
-        run: python scrapers/comps_scraper.py
+      # - name: Run the scraping script for comps
+      #   env: 
+      #     GOOGLE_CREDS: ${{ secrets.GOOGLE_CREDS }}
+      #     GOOGLE_SHEET_NAME: ${{ secrets.GOOGLE_SHEET_NAME }}
+      #     MONGODB_USERNAME: ${{ secrets.MONGODB_USERNAME }}
+      #     MONGODB_DB_PASSWORD: ${{ secrets.MONGODB_DB_PASSWORD }}
+      #     MONGODB_DB_NAME: ${{ secrets.MONGODB_DB_NAME }}
+      #   run: python scrapers/comps_scraper.py
 
       - name: Run the scraping script for dcf
         env: 

@@ -48,7 +48,19 @@ class StringMapper:
     def get_closest(self, query: str, num_results=3):
         if query in self.gts or query.lower() in self.gts:
             return [query]
+
+        query_words = set(query.lower().split())
+        candidates = []
+        for gt in self.gts:
+            gt_words = set(gt.lower().split())
+            if any(len(word) >= 3 for word in query_words & gt_words):
+                candidates.append(gt)
+        if candidates:
+            candidates = sorted(candidates, key=lambda x: len(x.split()))
+            return [candidates[0]]
+
         query_embedding = self.model.encode(query)
+        query_embedding = query_embedding / np.linalg.norm(query_embedding)
         similarities = np.dot(self.embeddings, query_embedding)
         similarities = np.argsort(similarities)[::-1]
         similarities = similarities[similarities > self.threshold][:num_results]
@@ -56,15 +68,56 @@ class StringMapper:
             return None
         return [self.gts[i] for i in similarities]
 
+    def get_closest_with_scores(self, query: str, num_results=3, indices_to_adjust=None):
+        if query in self.gts or query.lower() in self.gts:
+            return [(query, 1.0)]
+
+        query_words = set(query.lower().split())
+        candidates = []
+        for gt in self.gts:
+            gt_words = set(gt.lower().split())
+            if any(len(word) >= 3 for word in query_words & gt_words):
+                candidates.append(gt)
+        if candidates:
+            candidates = sorted(candidates, key=lambda x: len(x.split()))
+            return [(candidates[0], 1.0)]
+
+        query_embedding = self.model.encode(query)
+        query_embedding = query_embedding / np.linalg.norm(query_embedding)
+        scores = np.dot(self.embeddings, query_embedding)
+        if indices_to_adjust:
+            scores[indices_to_adjust] += np.max(scores) * 0.1
+
+        similarities = np.argsort(scores)[::-1]
+        similarities = similarities[similarities > self.threshold][:num_results]
+        if len(similarities) == 0:
+            return None
+        return [(self.gts[i], scores[i]) for i in similarities]
+
 
 def get_regional_crps(revenues_by_region: dict, mapper: StringMapper, country_erps: dict):
     regions = list(revenues_by_region.keys())
-    out = [mapper.get_closest(x) for x in regions]
-    out = [x[0] if x is not None else "Global" for x in out]
-    crps = [country_erps[x] for x in out]
+    indices_to_adjust = [i for i in range(len(mapper.gts) - 10, len(mapper.gts))]
+    mappings = [mapper.get_closest_with_scores(x, indices_to_adjust=indices_to_adjust) for x in regions]
+
+    flattened_mappings = [(region, gt, score) for region, mapping in zip(regions, mappings) if mapping for gt, score in mapping]
+    flattened_mappings.sort(key=lambda x: x[2], reverse=True)
+    used_gts = set()
+    final_mappings = {}
+
+    for region, gt, score in flattened_mappings:
+        if gt not in used_gts:
+            final_mappings[region] = gt
+            used_gts.add(gt)
+    for region in regions:
+        if region not in final_mappings:
+            final_mappings[region] = "Global"
+    # print(mapper.gts)
+    crps = [country_erps[final_mappings[region]] for region in regions]
     total_revenues = sum(revenues_by_region.values())
-    weights = [x / total_revenues for x in revenues_by_region.values()]
-    return sum([x * y for x, y in zip(crps, weights)])
+    weights = [revenues_by_region[region] / total_revenues for region in regions]
+    # print(final_mappings)
+    return sum([x * y for x, y in zip(crps, weights)]), {final_mappings[region]: v for region, v in revenues_by_region.items()}
 
 
 def get_industry_beta(industry: str, mapper: StringMapper, industry_betas: dict):
@@ -253,7 +306,8 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     marketscreener_url = get_marketscreener_url(info["symbol"])
 
     regional_revenues = get_revenue_by_region(info["symbol"], marketscreener_url)
-    equity_risk_premium = get_regional_crps(regional_revenues, region_mapper, country_erps) + mature_erp
+    equity_risk_premium, mapped_regional_revenues = get_regional_crps(regional_revenues, region_mapper, country_erps)
+    equity_risk_premium = equity_risk_premium + mature_erp
     _, company_spread, prob_of_failure = synthetic_rating(info["marketCap"], ttm_income_statement["Operating Income"].sum(), interest_expense)
     pre_tax_cost_of_debt = risk_free_rate + company_spread + country_erps[regions[0]]
 
@@ -298,16 +352,19 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
             "regional_revenues": regional_revenues,
             "industry": industry,
             "historical_revenue_growth": info.get("revenueGrowth", 0),
+            "mapped_regional_revenues": mapped_regional_revenues,
         },
     }
 
 
 def main():
-    url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt"
-    response = requests.get(url)
-    file_content = response.text
-    tickers = file_content.split("\n")
-    print("Number of tickers:", len(tickers))
+    # url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt"
+    # response = requests.get(url)
+    # file_content = response.text
+    # tickers = file_content.split("\n")
+    # print("Number of tickers:", len(tickers))
+    # tickers = ["AAPL"]
+    tickers = []
     country_erps = get_country_erp()
     region_mapper = StringMapper(list(country_erps.keys()))
     avg_metrics = get_industry_avgs()
@@ -333,6 +390,22 @@ def main():
                 print(future.result())
             except Exception as e:
                 print(f"[ERROR] - {e}")
+
+    # Write all constants to the database
+    db.update_one(
+        filter={},
+        update={
+            "$set": {
+                "Macro": {
+                    "Country ERPs": country_erps,
+                    "Avg Metrics": avg_metrics,
+                    "Risk Free Rate": risk_free_rate,
+                    "Mature ERP": mature_erp,
+                }
+            }
+        },
+        upsert=True,
+    )
 
 
 def process_ticker(ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, db):

@@ -281,6 +281,13 @@ def get_revenue_forecasts(ticker, url):
             return growth.values[0][1], growth.values[0, 1:].mean()
 
 
+def get_similar_stocks(ticker: str):
+    url = f"https://www.tipranks.com/stocks/{ticker.lower()}/similar-stocks"
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, "html.parser")
+    return [x.text for x in soup.find_all("a", {"data-link": "stock"})]
+
+
 def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper, avg_metrics: dict, industry_mapper: StringMapper, mature_erp: float, risk_free_rate: float, fx_rates: dict):
     # Defaults
     average_maturity = 0
@@ -371,6 +378,7 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
             "industry": industry,
             "historical_revenue_growth": info.get("revenueGrowth", 0),
             "mapped_regional_revenues": mapped_regional_revenues,
+            "similar_stocks": get_similar_stocks(info["symbol"]),
         },
     }
 

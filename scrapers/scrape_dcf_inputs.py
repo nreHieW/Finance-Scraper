@@ -22,6 +22,7 @@ warnings.filterwarnings("ignore")
 headers = {"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36"}
 
 MAX_WORKERS = 120
+CURRENCIES = {"ARS", "AUD", "BRL", "CAD", "CHF", "CLP", "CNY", "COP", "DKK", "EUR", "GBP", "HKD", "IDR", "ILS", "INR", "JPY", "KRW", "KZT", "MXN", "MYR", "PEN", "PHP", "SEK", "SGD", "TRY", "TWD", "USD", "VND", "ZAR"}
 
 
 # https://stackoverflow.com/questions/30098263/inserting-a-document-with-pymongo-invaliddocument-cannot-encode-object
@@ -93,6 +94,13 @@ class StringMapper:
         if len(similarities) == 0:
             return None
         return [(self.gts[i], scores[i]) for i in similarities]
+
+
+def get_exchange_rates():
+    fx_rate = {}
+    for currency in CURRENCIES:
+        fx_rate[currency] = yf.Ticker(currency + "USD=X").history().Close[-1]
+    return fx_rate
 
 
 def get_regional_crps(revenues_by_region: dict, mapper: StringMapper, country_erps: dict):
@@ -273,7 +281,7 @@ def get_revenue_forecasts(ticker, url):
             return growth.values[0][1], growth.values[0, 1:].mean()
 
 
-def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper, avg_metrics: dict, industry_mapper: StringMapper, mature_erp: float, risk_free_rate: float):
+def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper, avg_metrics: dict, industry_mapper: StringMapper, mature_erp: float, risk_free_rate: float, fx_rates: dict):
     # Defaults
     average_maturity = 0
     marginal_tax_rate = 0.21
@@ -286,6 +294,16 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     last_balance_sheet = last_balance_sheet[last_balance_sheet.columns[:4]].T
     info = ticker.info
     name = info.get("longName")
+    curr_currency = info.get("financialCurrency")
+    if curr_currency:
+        fx_rate = fx_rates.get(curr_currency)
+        if fx_rate:
+            last_balance_sheet = last_balance_sheet.apply(lambda x: x * fx_rate)
+            ttm_income_statement["Operating Revenue"] = ttm_income_statement["Operating Revenue"] * fx_rate
+            ttm_income_statement["Interest Expense"] = ttm_income_statement["Interest Expense"] * fx_rate
+            ttm_income_statement["Pretax Income"] = ttm_income_statement["Pretax Income"] * fx_rate
+            ttm_income_statement["Net Income"] = ttm_income_statement["Net Income"] * fx_rate
+            ttm_income_statement["Operating Income"] = ttm_income_statement["Operating Income"] * fx_rate
 
     revenues = ttm_income_statement.get("Operating Revenue", pd.Series([0] * len(ttm_income_statement))).sum()
     interest_expense = ttm_income_statement.get("Interest Expense", pd.Series([0] * len(ttm_income_statement))).sum()
@@ -358,12 +376,11 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
 
 
 def main():
-    # url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt"
-    # response = requests.get(url)
-    # file_content = response.text
-    # tickers = file_content.split("\n")
-    # print("Number of tickers:", len(tickers))
-    tickers = []
+    url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt"
+    response = requests.get(url)
+    file_content = response.text
+    tickers = file_content.split("\n")
+    print("Number of tickers:", len(tickers))
     country_erps = get_country_erp()
     region_mapper = StringMapper(list(country_erps.keys()))
     avg_metrics = get_industry_avgs()
@@ -371,6 +388,7 @@ def main():
     industry_mapper = StringMapper(list(avg_betas.keys()), threshold=0.7)
     risk_free_rate = get_10year_tbill()
     mature_erp = get_mature_erp()
+    fx_rates = get_exchange_rates()
 
     uri = f"mongodb+srv://{os.getenv('MONGODB_USERNAME')}:{os.getenv('MONGODB_DB_PASSWORD')}@{os.getenv('MONGODB_DB_NAME')}.kdnx4hj.mongodb.net/?retryWrites=true&w=majority&appName={os.getenv('MONGODB_DB_NAME')}"
     client = MongoClient(uri, server_api=ServerApi("1"))
@@ -381,7 +399,7 @@ def main():
         for i, ticker in enumerate(tickers):
             if i > 0 and i % MAX_WORKERS == 0:
                 time.sleep(1)
-            future = executor.submit(process_ticker, ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, db)
+            future = executor.submit(process_ticker, ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, db, fx_rates)
             futures.append(future)
 
         for future in concurrent.futures.as_completed(futures):
@@ -408,12 +426,12 @@ def main():
     )
 
 
-def process_ticker(ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, db):
+def process_ticker(ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, db, fx_rates):
     url = get_marketscreener_url(ticker)
     if url is None:
         return f"[INFO] Could not find URL for {ticker}"
     try:
-        dcf_inputs = get_dcf_inputs(ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate)
+        dcf_inputs = get_dcf_inputs(ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, fx_rates)
         dcf_inputs = json.dumps(dcf_inputs, cls=CustomEncoder)
         dcf_inputs = json.loads(dcf_inputs)
         db.update_one({"Ticker": ticker}, {"$set": dcf_inputs}, upsert=True)

@@ -25,6 +25,30 @@ MAX_WORKERS = 120
 CURRENCIES = {"ARS", "AUD", "BRL", "CAD", "CHF", "CLP", "CNY", "COP", "DKK", "EUR", "GBP", "HKD", "IDR", "ILS", "INR", "JPY", "KRW", "KZT", "MXN", "MYR", "PEN", "PHP", "SEK", "SGD", "TRY", "TWD", "USD", "VND", "ZAR"}
 
 
+def setup_proxies():
+    response = requests.get("https://www.sslproxies.org/", headers={"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36"})
+
+    proxies = []
+    soup = BeautifulSoup(response.text, "html.parser")
+    for row in soup.find_all("tr"):
+        tds = row.find_all("td")
+        if len(tds) == 0:
+            continue
+        proxies.append({"ip": tds[0].string, "port": tds[1].string})
+    proxies = [f"{x['ip']}:{x['port']}" for x in proxies if x["ip"] and x["port"]]
+    proxies = [x for x in proxies if "-" not in x]  # remove date
+    proxies = [x for x in proxies if len(x.split(":")) == 2 and len(x.split(".")) == 4]
+    return proxies
+
+
+PROXIES = setup_proxies()
+
+
+def get_proxy():
+    idx = np.random.randint(0, len(PROXIES))
+    return {"http": PROXIES[idx], "https": PROXIES[idx]}
+
+
 # https://stackoverflow.com/questions/30098263/inserting-a-document-with-pymongo-invaliddocument-cannot-encode-object
 class CustomEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -198,6 +222,9 @@ def synthetic_rating(market_cap, operating_income, interest_expense):
         if low <= interest_coverage_rato <= high:
             rating, spread = r, s
             break
+    if operating_income < 0:
+        rating = "BB"
+        spread = rating_mapping[7][3]
     default_prob = {"AAA": 0.70, "AA": 0.72, "A+": 0.72, "A": 1.24, "A-": 1.24, "BBB": 3.32, "BB+": 3.32, "BB": 11.78, "B+": 11.79, "B": 23.74, "B-": 23.75, "CCC": 50.38, "CC": 50.38, "C": 50.38, "D": 50.38}[rating] / 100  # in percentages
     spread = float(s.replace("%", "")) / 100
     return rating, spread, default_prob
@@ -283,7 +310,14 @@ def get_revenue_forecasts(ticker, url):
 
 def get_similar_stocks(ticker: str):
     url = f"https://www.tipranks.com/stocks/{ticker.lower()}/similar-stocks"
-    response = requests.get(url, headers=headers)
+    try:
+        response = requests.get(url, headers=headers, proxies=get_proxy())
+    except:
+        try:
+            response = requests.get(url, headers=headers, proxies=get_proxy())
+        except:
+            response = requests.get(url, headers=headers)
+
     soup = BeautifulSoup(response.text, "html.parser")
     return [x.text for x in soup.find_all("a", {"data-link": "stock"})]
 
@@ -348,6 +382,7 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     return {
         "name": name,
         "revenues": revenues,
+        "operating_income": ttm_income_statement["Operating Income"].sum(),
         "interest_expense": interest_expense,
         "book_value_of_equity": book_value_of_equity,
         "book_value_of_debt": book_value_of_debt,
@@ -389,6 +424,7 @@ def main():
     file_content = response.text
     tickers = file_content.split("\n")
     print("Number of tickers:", len(tickers))
+
     country_erps = get_country_erp()
     region_mapper = StringMapper(list(country_erps.keys()))
     avg_metrics = get_industry_avgs()

@@ -288,7 +288,7 @@ def get_revenue_by_region(ticker, url):
     return df[str(latest_year)].to_dict()
 
 
-def get_revenue_forecasts(ticker, url):
+def get_revenue_forecasts(url):
     page = requests.get(url + "finances/", headers=headers)
     soup = BeautifulSoup(page.content, features="lxml")
     for div in soup.find_all("div", {"class": "card card--collapsible mb-15"}):
@@ -305,7 +305,10 @@ def get_revenue_forecasts(ticker, url):
             curr_year_index = indiv.columns.get_loc(str(curr_year))
             indiv = indiv.iloc[:, curr_year_index:].astype(float)
             growth = indiv.pct_change(axis=1)
-            return growth.values[0][1], growth.values[0, 1:].mean()
+            revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate = growth.values[0][1], growth.values[0, 1:].mean()
+            op_margin_changes = income_statement.loc[["Operating Margin"]].iloc[:, curr_year_index:].apply(lambda x: x.str.replace("%", "").astype(float) / 100).pct_change(axis=1)
+            op_margin_change_next_year = op_margin_changes.values[0][1]  # MarketScreener has some inconsistencies of EBIT values versus yahoo finance
+            return revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, op_margin_change_next_year
 
 
 def get_similar_stocks(ticker: str):
@@ -320,6 +323,114 @@ def get_similar_stocks(ticker: str):
 
     soup = BeautifulSoup(response.text, "html.parser")
     return [x.text for x in soup.find_all("a", {"data-link": "stock"})]
+
+
+def r_and_d_handler(expenses: list, industry: str):
+    num_years = {
+        "Advertising": 2,
+        "Aerospace/Defense": 10,
+        "Air Transport": 10,
+        "Aluminum": 5,
+        "Apparel": 3,
+        "Auto & Truck": 10,
+        "Auto Parts (OEM)": 5,
+        "Auto Parts (Replacement)": 5,
+        "Bank": 2,
+        "Bank (Canadian)": 2,
+        "Bank (Foreign)": 2,
+        "Bank (Midwest)": 2,
+        "Beverage (Alcoholic)": 3,
+        "Beverage (Soft Drink)": 3,
+        "Building Materials": 5,
+        "Cable TV": 10,
+        "Canadian Energy": 10,
+        "Cement & Aggregates": 10,
+        "Chemical (Basic)": 10,
+        "Chemical (Diversified)": 10,
+        "Chemical (Specialty)": 10,
+        "Coal/Alternate Energy": 5,
+        "Computer & Peripherals": 5,
+        "Computer Software & Svcs": 3,
+        "Copper": 5,
+        "Diversified Co.": 5,
+        "Drug": 10,
+        "Drugstore": 3,
+        "Educational Services": 3,
+        "Electric Util. (Central)": 10,
+        "Electric Utility (East)": 10,
+        "Electric Utility (West)": 10,
+        "Electrical Equipment": 10,
+        "Electronics": 5,
+        "Entertainment": 3,
+        "Environmental": 5,
+        "Financial Services": 2,
+        "Food Processing": 3,
+        "Food Wholesalers": 3,
+        "Foreign Electron/Entertn": 5,
+        "Foreign Telecom.": 10,
+        "Furn./Home Furnishings": 3,
+        "Gold/Silver Mining": 5,
+        "Grocery": 2,
+        "Healthcare Info Systems": 3,
+        "Home Appliance": 5,
+        "Homebuilding": 5,
+        "Hotel/Gaming": 3,
+        "Household Products": 3,
+        "Industrial Services": 3,
+        "Insurance (Diversified)": 3,
+        "Insurance (Life)": 3,
+        "Insurance (Prop/Casualty)": 3,
+        "Internet": 3,
+        "Investment Co. (Domestic)": 3,
+        "Investment Co. (Foreign)": 3,
+        "Investment Co. (Income)": 3,
+        "Machinery": 10,
+        "Manuf. Housing/Rec Veh": 5,
+        "Maritime": 10,
+        "Medical Services": 3,
+        "Medical Supplies": 5,
+        "Metal Fabricating": 10,
+        "Metals & Mining (Div.)": 5,
+        "Natural Gas (Distrib.)": 10,
+        "Natural Gas (Diversified)": 10,
+        "Newspaper": 3,
+        "Office Equip & Supplies": 5,
+        "Oilfield Services/Equip.": 5,
+        "Packaging & Container": 5,
+        "Paper & Forest Products": 10,
+        "Petroleum (Integrated)": 5,
+        "Petroleum (Producing)": 5,
+        "Precision Instrument": 5,
+        "Publishing": 3,
+        "R.E.I.T.": 3,
+        "Railroad": 5,
+        "Recreation": 5,
+        "Restaurant": 2,
+        "Retail (Special Lines)": 2,
+        "Retail Building Supply": 2,
+        "Retail Store": 2,
+        "Securities Brokerage": 2,
+        "Semiconductor": 5,
+        "Semiconductor Cap Equip": 5,
+        "Shoe": 3,
+        "Steel (General)": 5,
+        "Steel (Integrated)": 5,
+        "Telecom. Equipment": 10,
+        "Telecom. Services": 5,
+        "Textile": 5,
+        "Thrift": 2,
+        "Tire & Rubber": 5,
+        "Tobacco": 5,
+        "Toiletries/Cosmetics": 3,
+        "Trucking/Transp. Leasing": 5,
+        "Utility (Foreign)": 10,
+        "Water Utility": 10,
+    }.get(
+        industry, 3
+    )  # Default to 3 years
+    num_years = min(len(expenses), num_years)
+    expenses = np.array(expenses)[: num_years + 1]
+    return expenses
 
 
 def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper, avg_metrics: dict, industry_mapper: StringMapper, mature_erp: float, risk_free_rate: float, fx_rates: dict):
@@ -370,9 +481,10 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     _, company_spread, prob_of_failure = synthetic_rating(info["marketCap"], ttm_income_statement["Operating Income"].sum(), interest_expense)
     pre_tax_cost_of_debt = risk_free_rate + company_spread + country_erps[regions[0]]
 
-    revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate = get_revenue_forecasts(info["symbol"], marketscreener_url)
-    operating_margin_next_year = ttm_income_statement["Operating Income"].sum() / revenues
+    revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, op_margin_change_next_year = get_revenue_forecasts(marketscreener_url)
     target_pre_tax_operating_margin = avg_metrics["Pre-tax Operating Margin (Unadjusted)"][industry]
+    operating_margin_this_year = ttm_income_statement["Operating Income"].sum() / revenues
+    operating_margin_next_year = operating_margin_this_year * (1 + op_margin_change_next_year)
     target_pre_tax_operating_margin = max(target_pre_tax_operating_margin, operating_margin_next_year)
     year_of_convergence_for_margin = 5
     years_of_high_growth = 5
@@ -381,6 +493,7 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     sales_to_capital_ratio_steady = avg_metrics["Sales/Capital"][industry]
     r_and_d_hist = ticker.income_stmt.T.get("Research And Development", pd.Series([0])).fillna(0).to_list()
     r_and_d_ttm = ttm_income_statement.get("Research And Development", pd.Series([0])).to_list()
+    r_and_d_expenses = r_and_d_handler(r_and_d_hist + r_and_d_ttm, industry)
     return {
         "name": name,
         "revenues": revenues,
@@ -416,7 +529,7 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
             "historical_revenue_growth": info.get("revenueGrowth", 0),
             "mapped_regional_revenues": mapped_regional_revenues,
             "similar_stocks": get_similar_stocks(info["symbol"]),
-            "research_and_development": [r_and_d_ttm] + r_and_d_hist,
+            "research_and_development": r_and_d_expenses,
         },
     }
 

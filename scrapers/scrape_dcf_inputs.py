@@ -379,6 +379,8 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     curr_sales_to_capital_ratio = revenues / (book_value_of_equity + book_value_of_debt - cash_and_marketable_securities - cross_holdings_and_other_non_operating_assets)
     sales_to_capital_ratio_early = curr_sales_to_capital_ratio
     sales_to_capital_ratio_steady = avg_metrics["Sales/Capital"][industry]
+    r_and_d_hist = ticker.income_stmt.T.get("Research And Development", pd.Series([0])).fillna(0).to_list()
+    r_and_d_ttm = ttm_income_statement.get("Research And Development", pd.Series([0])).to_list()
     return {
         "name": name,
         "revenues": revenues,
@@ -414,6 +416,7 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
             "historical_revenue_growth": info.get("revenueGrowth", 0),
             "mapped_regional_revenues": mapped_regional_revenues,
             "similar_stocks": get_similar_stocks(info["symbol"]),
+            "research_and_development": [r_and_d_ttm] + r_and_d_hist,
         },
     }
 
@@ -424,7 +427,6 @@ def main():
     file_content = response.text
     tickers = file_content.split("\n")
     print("Number of tickers:", len(tickers))
-
     country_erps = get_country_erp()
     region_mapper = StringMapper(list(country_erps.keys()))
     avg_metrics = get_industry_avgs()

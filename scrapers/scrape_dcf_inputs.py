@@ -451,11 +451,11 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
         fx_rate = fx_rates.get(curr_currency)
         if fx_rate:
             last_balance_sheet = last_balance_sheet.apply(lambda x: x * fx_rate)
-            ttm_income_statement["Operating Revenue"] = ttm_income_statement["Operating Revenue"] * fx_rate
-            ttm_income_statement["Interest Expense"] = ttm_income_statement["Interest Expense"] * fx_rate
-            ttm_income_statement["Pretax Income"] = ttm_income_statement["Pretax Income"] * fx_rate
-            ttm_income_statement["Net Income"] = ttm_income_statement["Net Income"] * fx_rate
-            ttm_income_statement["Operating Income"] = ttm_income_statement["Operating Income"] * fx_rate
+            ttm_income_statement["Operating Revenue"] = ttm_income_statement.get("Operating Revenue", 0) * fx_rate
+            ttm_income_statement["Interest Expense"] = ttm_income_statement.get("Interest Expense", 0) * fx_rate
+            ttm_income_statement["Pretax Income"] = ttm_income_statement.get("Pretax Income", 0) * fx_rate
+            ttm_income_statement["Net Income"] = ttm_income_statement.get("Net Income", 0) * fx_rate
+            ttm_income_statement["Operating Income"] = ttm_income_statement.get("Operating Income", 0) * fx_rate
 
     revenues = ttm_income_statement.get("Operating Revenue", pd.Series([0] * len(ttm_income_statement))).sum()
     interest_expense = ttm_income_statement.get("Interest Expense", pd.Series([0] * len(ttm_income_statement))).sum()
@@ -552,6 +552,7 @@ def main():
     uri = f"mongodb+srv://{os.getenv('MONGODB_USERNAME')}:{os.getenv('MONGODB_DB_PASSWORD')}@{os.getenv('MONGODB_DB_NAME')}.kdnx4hj.mongodb.net/?retryWrites=true&w=majority&appName={os.getenv('MONGODB_DB_NAME')}"
     client = MongoClient(uri, server_api=ServerApi("1"))
     db = client[os.getenv("MONGODB_DB_NAME")]["dcf_inputs"]
+    num_errors = 0
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = []
@@ -563,10 +564,14 @@ def main():
 
         for future in concurrent.futures.as_completed(futures):
             try:
-                print(future.result())
+                r = future.result()
+                print(r)
+                if "ERROR" in r:
+                    num_errors += 1
             except Exception as e:
                 print(f"[ERROR] - {e}")
 
+    print(f"Number of errors: {num_errors}")
     # Write all constants to the database
     db = client[os.getenv("MONGODB_DB_NAME")]["macro"]
     db.update_one(

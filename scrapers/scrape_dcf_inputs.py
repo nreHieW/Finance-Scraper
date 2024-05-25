@@ -462,7 +462,8 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     book_value_of_equity = last_balance_sheet.get("Stockholders Equity", pd.Series([0])).iloc[0]
     book_value_of_debt = last_balance_sheet.get("Total Debt", pd.Series([0])).iloc[0]
     cash_and_marketable_securities = last_balance_sheet.get("Cash Cash Equivalents And Short Term Investments", pd.Series([0])).iloc[0]
-    cross_holdings_and_other_non_operating_assets = last_balance_sheet.get("Minority Interest", pd.Series([0])).iloc[0]
+    cross_holdings_and_other_non_operating_assets = last_balance_sheet.get("Investments And Advances", pd.Series([0])).iloc[0]
+    minority_interest = last_balance_sheet.get("Minority Interest", pd.Series([0])).iloc[0]  # by right. should convert to market value
     number_of_shares_outstanding = info.get("sharesOutstanding", 0)
     curr_price = info.get("previousClose", 0)
     effective_tax_rate = (ttm_income_statement.get("Tax Rate For Calcs", pd.Series([0])) * ttm_income_statement.get("Pretax Income", pd.Series([0]))).sum() / ttm_income_statement.get("Pretax Income", pd.Series([1])).sum()
@@ -503,6 +504,7 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
         "book_value_of_debt": book_value_of_debt,
         "cash_and_marketable_securities": cash_and_marketable_securities,
         "cross_holdings_and_other_non_operating_assets": cross_holdings_and_other_non_operating_assets,
+        "minority_interest": minority_interest,
         "number_of_shares_outstanding": number_of_shares_outstanding,
         "curr_price": curr_price,
         "effective_tax_rate": effective_tax_rate,

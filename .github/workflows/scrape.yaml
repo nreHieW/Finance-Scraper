@@ -18,6 +18,13 @@ jobs:
       
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Run the scraping script for dcf
+        env: 
+          MONGODB_USERNAME: ${{ secrets.MONGODB_USERNAME }}
+          MONGODB_DB_PASSWORD: ${{ secrets.MONGODB_DB_PASSWORD }}
+          MONGODB_DB_NAME: ${{ secrets.MONGODB_DB_NAME }}
+        run: python scrapers/scrape_dcf_inputs.py
   
       - name: Run the scraping script for comps
         env: 
@@ -28,9 +35,3 @@ jobs:
           MONGODB_DB_NAME: ${{ secrets.MONGODB_DB_NAME }}
         run: python scrapers/comps_scraper.py
 
-      - name: Run the scraping script for dcf
-        env: 
-          MONGODB_USERNAME: ${{ secrets.MONGODB_USERNAME }}
-          MONGODB_DB_PASSWORD: ${{ secrets.MONGODB_DB_PASSWORD }}
-          MONGODB_DB_NAME: ${{ secrets.MONGODB_DB_NAME }}
-        run: python scrapers/scrape_dcf_inputs.py

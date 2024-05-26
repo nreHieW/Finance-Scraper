@@ -248,7 +248,7 @@ def get_industry_avgs():
     return df.set_index("Industry Name").to_dict()
 
 
-def get_marketscreener_url(ticker):
+def get_marketscreener_url(ticker, name: str = ""):
     search_url = "https://www.marketscreener.com/search/?q=" + "+".join(ticker.split())
     page = requests.get(search_url, headers=headers)
     soup = BeautifulSoup(page.content, "lxml")
@@ -258,12 +258,36 @@ def get_marketscreener_url(ticker):
         currency_tag = row.find("span", {"class": "txt-muted"})
         if currency_tag:
             currency = currency_tag.text.strip()
-            if currency == "USD":
+            if currency == "USD" and row.find("td", {"class": "txt-bold"}).text.strip() == ticker:
                 link = row.find("a", href=True)["href"]
                 found_link = "https://www.marketscreener.com" + link
                 break
+
+    if not found_link and name:
+        search_url = "https://www.marketscreener.com/search/?q=" + "+".join(name.split())
+        page = requests.get(search_url, headers=headers)
+        soup = BeautifulSoup(page.content, "lxml")
+        rows = soup.find_all("tr")
+        for row in rows:
+            currency_tag = row.find("span", {"class": "txt-muted"})
+            if currency_tag:
+                currency = currency_tag.text.strip()
+                if currency == "USD" and row.find("td", {"class": "txt-bold"}).text.strip() == ticker:
+                    link = row.find("a", href=True)["href"]
+                    found_link = "https://www.marketscreener.com" + link
+                    break
     if not found_link:
         print(f"[INFO] Could not find {ticker} on marketscreener")
+    else:
+        if os.path.exists("marketscreener_links.json"):
+            with open("marketscreener_links.json", "r") as f:
+                data = json.load(f)
+            data[ticker] = found_link
+        else:
+            data = {ticker: found_link}
+        with open("marketscreener_links.json", "w") as f:
+            json.dump(data, f)
+
     return found_link
 
 
@@ -307,9 +331,7 @@ def get_revenue_forecasts(url, target_value):
             growth = indiv.pct_change(axis=1)
             revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate = growth.values[0][1], growth.values[0, 1:].mean()
             op_margins = income_statement.loc[["Operating Margin"]].iloc[:, curr_year_index:].apply(lambda x: x.str.replace("%", "").astype(float) / 100)
-            abs_diff = op_margins.loc["Operating Margin"].apply(lambda x: abs(x - target_value))
-            closest_column = abs_diff.idxmin()
-            op_margin_change_next_year = op_margins[[closest_column, str(int(closest_column) + 1)]].pct_change(axis=1).values[0][1]  # MarketScreener has some inconsistencies of EBIT values versus yahoo finance
+            op_margin_change_next_year = op_margins[[str(curr_year), str(curr_year + 1)]].pct_change(axis=1).values[0][1]  # MarketScreener has some inconsistencies of EBIT values versus yahoo finance
             return revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, op_margin_change_next_year
 
 
@@ -332,10 +354,12 @@ def r_and_d_handler(ticker, industry):
     response = requests.get(url, headers={"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36"})
     soup = BeautifulSoup(response.text, "html.parser")
     htmls = soup.find_all("table")
-
-    df = pd.concat([pd.read_html(str(htmls))[0], pd.read_html(str(htmls))[1]]).iloc[::4]
-    df["Value"] = df["Value"].apply(lambda x: {"B": 10**9, "M": 10**6, "K": 10**3}.get(x[-1], 1) * float(x[:-1]))
-    expenses = df["Value"].tolist()
+    try:
+        df = pd.concat([pd.read_html(str(htmls))[0], pd.read_html(str(htmls))[1]]).iloc[::4]
+        df["Value"] = df["Value"].apply(lambda x: {"B": 10**9, "M": 10**6, "K": 10**3}.get(x[-1], 1) * float(x[:-1]))
+        expenses = df["Value"].tolist()
+    except:
+        expenses = [0]
     num_years = {
         "Advertising": 2,
         "Aerospace/Defense": 10,
@@ -483,8 +507,7 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     industry = info["industry"]
     avg_betas = avg_metrics["Unlevered Beta"]
     unlevered_beta, industry = get_industry_beta(industry, industry_mapper, avg_betas)
-
-    marketscreener_url = get_marketscreener_url(info["symbol"])
+    marketscreener_url = get_marketscreener_url(info["symbol"], info["shortName"])
 
     regional_revenues = get_revenue_by_region(info["symbol"], marketscreener_url)
     equity_risk_premium, mapped_regional_revenues = get_regional_crps(regional_revenues, region_mapper, country_erps)
@@ -493,7 +516,8 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     pre_tax_cost_of_debt = risk_free_rate + company_spread + country_erps[regions[0]]
 
     target_pre_tax_operating_margin = avg_metrics["Pre-tax Operating Margin (Unadjusted)"][industry]
-    operating_margin_this_year = ttm_income_statement["Operating Income"].sum() / revenues
+    # operating_margin_this_year = ttm_income_statement["Operating Income"].sum() / revenues
+    operating_margin_this_year = ticker.info.get("operatingMargins", ttm_income_statement["Operating Income"].sum() / revenues)
 
     revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, op_margin_change_next_year = get_revenue_forecasts(marketscreener_url, operating_margin_this_year)
     operating_margin_next_year = operating_margin_this_year * (1 + op_margin_change_next_year)
@@ -503,8 +527,6 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     curr_sales_to_capital_ratio = revenues / (book_value_of_equity + book_value_of_debt - cash_and_marketable_securities - cross_holdings_and_other_non_operating_assets)
     sales_to_capital_ratio_early = curr_sales_to_capital_ratio
     sales_to_capital_ratio_steady = avg_metrics["Sales/Capital"][industry]
-    r_and_d_hist = ticker.income_stmt.T.get("Research And Development", pd.Series([0])).fillna(0).to_list()
-    r_and_d_ttm = ttm_income_statement.get("Research And Development", pd.Series([0])).to_list()
     r_and_d_expenses = r_and_d_handler(info["symbol"], industry)
     return {
         "name": name,
@@ -578,12 +600,10 @@ def main():
 
         for future in concurrent.futures.as_completed(futures):
             try:
-                r = future.result()
-                print(r)
-                if "ERROR" in r:
-                    num_errors += 1
+                future.result()
             except Exception as e:
-                print(f"[ERROR] - {e}")
+                num_errors += 1
+                print(f"[ERROR] {e}")
 
     print(f"Number of errors: {num_errors}")
     # Write all constants to the database
@@ -605,17 +625,14 @@ def main():
 
 
 def process_ticker(ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, db, fx_rates):
-    url = get_marketscreener_url(ticker)
-    if url is None:
-        return f"[INFO] Could not find URL for {ticker}"
-    try:
-        dcf_inputs = get_dcf_inputs(ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, fx_rates)
-        dcf_inputs = json.dumps(dcf_inputs, cls=CustomEncoder)
-        dcf_inputs = json.loads(dcf_inputs)
-        db.update_one({"Ticker": ticker}, {"$set": dcf_inputs}, upsert=True)
-        return f"[SUCCESS] {ticker} - DCF inputs updated"
-    except Exception as e:
-        return f"[ERROR] {ticker} - {e}"
+    dcf_inputs = get_dcf_inputs(ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, fx_rates)
+    dcf_inputs = json.dumps(dcf_inputs, cls=CustomEncoder)
+    dcf_inputs = json.loads(dcf_inputs)
+    db.update_one({"Ticker": ticker}, {"$set": dcf_inputs}, upsert=True)
+
+
+# except Exception as e:
+#     return f"[ERROR] {ticker} - {e}"
 
 
 if __name__ == "__main__":

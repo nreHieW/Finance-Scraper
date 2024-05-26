@@ -306,7 +306,8 @@ def get_revenue_by_region(ticker, url):
             df = pd.read_html(str(div.find("table")))[0]
             break
     if df is None:
-        print(f"[INFO] Could not find sales per region for {ticker}")
+        # print(f"[INFO] Could not find sales per region for {ticker}")
+        return {"Global": 1}
     countries = df[df.columns[0]].values
     countries = [re.search(r"^([^\d]+)", item).group(0).strip() for item in countries]
     df["country"] = countries
@@ -630,10 +631,13 @@ def main():
 
 
 def process_ticker(ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, db, fx_rates):
-    dcf_inputs = get_dcf_inputs(ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, fx_rates)
-    dcf_inputs = json.dumps(dcf_inputs, cls=CustomEncoder)
-    dcf_inputs = json.loads(dcf_inputs)
-    db.update_one({"Ticker": ticker}, {"$set": dcf_inputs}, upsert=True)
+    try:
+        dcf_inputs = get_dcf_inputs(ticker, country_erps, region_mapper, avg_metrics, industry_mapper, mature_erp, risk_free_rate, fx_rates)
+        dcf_inputs = json.dumps(dcf_inputs, cls=CustomEncoder)
+        dcf_inputs = json.loads(dcf_inputs)
+        db.update_one({"Ticker": ticker}, {"$set": dcf_inputs}, upsert=True)
+    except Exception as e:
+        print(f"[ERROR] {e}")
 
 
 if __name__ == "__main__":

@@ -53,20 +53,21 @@ def get_htmls(urls):
 
 
 def get_marketscreener_links(tickers):
-    # search_queries = ["https://www.marketscreener.com/search/?q=" + "+".join(x.split()) for x in tickers]
-    # found_htmls = get_htmls(search_queries)
-    # links = {}
-    # for ticker, html in zip(tickers, found_htmls):
-    #     soup = BeautifulSoup(html, features="lxml")
-    #     rows = soup.findAll("tr")
-    #     for row in rows:
-    #         currency_tag = row.find("span", {"class": "txt-muted"})
-    #         if currency_tag:
-    #             currency = currency_tag.text.strip()
-    #             if currency == "USD":
-    #                 link = row.find("a", href=True)["href"]
-    #                 links[ticker] = "https://www.marketscreener.com" + link + "finances/"
-    #                 break
+    search_queries = ["https://www.marketscreener.com/search/?q=" + "+".join(x.split()) for x in tickers]
+    found_htmls = get_htmls(search_queries)
+    with open("marketscreener_links.json", "r") as f:
+        links = json.load(f)
+    for ticker, html in zip(tickers, found_htmls):
+        soup = BeautifulSoup(html, features="lxml")
+        rows = soup.findAll("tr")
+        for row in rows:
+            currency_tag = row.find("span", {"class": "txt-muted"})
+            if currency_tag:
+                currency = currency_tag.text.strip()
+                if currency == "USD" and row.find("td", {"class": "txt-bold"}).text.strip() == ticker:
+                    link = row.find("a", href=True)["href"]
+                    links[ticker] = "https://www.marketscreener.com" + link + "finances/"
+                    break
     with open("marketscreener_links.json", "r") as f:
         links = json.load(f)
 

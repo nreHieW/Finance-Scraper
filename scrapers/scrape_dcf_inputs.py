@@ -288,7 +288,7 @@ def get_revenue_by_region(ticker, url):
     return df[str(latest_year)].to_dict()
 
 
-def get_revenue_forecasts(url):
+def get_revenue_forecasts(url, target_value):
     page = requests.get(url + "finances/", headers=headers)
     soup = BeautifulSoup(page.content, features="lxml")
     for div in soup.find_all("div", {"class": "card card--collapsible mb-15"}):
@@ -306,8 +306,10 @@ def get_revenue_forecasts(url):
             indiv = indiv.iloc[:, curr_year_index:].astype(float)
             growth = indiv.pct_change(axis=1)
             revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate = growth.values[0][1], growth.values[0, 1:].mean()
-            op_margin_changes = income_statement.loc[["Operating Margin"]].iloc[:, curr_year_index:].apply(lambda x: x.str.replace("%", "").astype(float) / 100).pct_change(axis=1)
-            op_margin_change_next_year = op_margin_changes.values[0][1]  # MarketScreener has some inconsistencies of EBIT values versus yahoo finance
+            op_margins = income_statement.loc[["Operating Margin"]].iloc[:, curr_year_index:].apply(lambda x: x.str.replace("%", "").astype(float) / 100)
+            abs_diff = op_margins.loc["Operating Margin"].apply(lambda x: abs(x - target_value))
+            closest_column = abs_diff.idxmin()
+            op_margin_change_next_year = op_margins[[closest_column, str(int(closest_column) + 1)]].pct_change(axis=1).values[0][1]  # MarketScreener has some inconsistencies of EBIT values versus yahoo finance
             return revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, op_margin_change_next_year
 
 
@@ -325,7 +327,15 @@ def get_similar_stocks(ticker: str):
     return [x.text for x in soup.find_all("a", {"data-link": "stock"})]
 
 
-def r_and_d_handler(expenses: list, industry: str):
+def r_and_d_handler(ticker, industry):
+    url = f"https://ycharts.com/companies/{ticker.upper()}/r_and_d_expense_ttm"
+    response = requests.get(url, headers={"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36"})
+    soup = BeautifulSoup(response.text, "html.parser")
+    htmls = soup.find_all("table")
+
+    df = pd.concat([pd.read_html(str(htmls))[0], pd.read_html(str(htmls))[1]]).iloc[::4]
+    df["Value"] = df["Value"].apply(lambda x: {"B": 10**9, "M": 10**6, "K": 10**3}.get(x[-1], 1) * float(x[:-1]))
+    expenses = df["Value"].tolist()
     num_years = {
         "Advertising": 2,
         "Aerospace/Defense": 10,
@@ -482,9 +492,10 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     _, company_spread, prob_of_failure = synthetic_rating(info["marketCap"], ttm_income_statement["Operating Income"].sum(), interest_expense)
     pre_tax_cost_of_debt = risk_free_rate + company_spread + country_erps[regions[0]]
 
-    revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, op_margin_change_next_year = get_revenue_forecasts(marketscreener_url)
     target_pre_tax_operating_margin = avg_metrics["Pre-tax Operating Margin (Unadjusted)"][industry]
     operating_margin_this_year = ttm_income_statement["Operating Income"].sum() / revenues
+
+    revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, op_margin_change_next_year = get_revenue_forecasts(marketscreener_url, operating_margin_this_year)
     operating_margin_next_year = operating_margin_this_year * (1 + op_margin_change_next_year)
     target_pre_tax_operating_margin = max(target_pre_tax_operating_margin, operating_margin_next_year)
     year_of_convergence_for_margin = 5
@@ -494,7 +505,7 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     sales_to_capital_ratio_steady = avg_metrics["Sales/Capital"][industry]
     r_and_d_hist = ticker.income_stmt.T.get("Research And Development", pd.Series([0])).fillna(0).to_list()
     r_and_d_ttm = ttm_income_statement.get("Research And Development", pd.Series([0])).to_list()
-    r_and_d_expenses = r_and_d_handler(r_and_d_hist + r_and_d_ttm, industry)
+    r_and_d_expenses = r_and_d_handler(info["symbol"], industry)
     return {
         "name": name,
         "revenues": revenues,
@@ -532,6 +543,7 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
             "mapped_regional_revenues": mapped_regional_revenues,
             "similar_stocks": get_similar_stocks(info["symbol"]),
             "research_and_development": r_and_d_expenses,
+            "last_updated_financials": ttm_income_statement.index[0].strftime("%Y-%m-%d"),
         },
     }
 

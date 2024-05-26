@@ -527,6 +527,7 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
 
     revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, op_margin_change_next_year = get_revenue_forecasts(marketscreener_url)
     operating_margin_next_year = operating_margin_this_year * (1 + op_margin_change_next_year)
+    operating_margin_next_year = min(operating_margin_next_year, 0.7)
     target_pre_tax_operating_margin = max(target_pre_tax_operating_margin, operating_margin_next_year)
     year_of_convergence_for_margin = 5
     years_of_high_growth = 5

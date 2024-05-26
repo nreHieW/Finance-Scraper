@@ -14,6 +14,9 @@ import os
 import json
 import concurrent.futures
 import time
+import threading
+
+JSON_LOCK = threading.Lock()
 
 load_dotenv()
 
@@ -279,14 +282,16 @@ def get_marketscreener_url(ticker, name: str = ""):
     if not found_link:
         print(f"[INFO] Could not find {ticker} on marketscreener")
     else:
-        if os.path.exists("marketscreener_links.json"):
-            with open("marketscreener_links.json", "r") as f:
-                data = json.load(f)
-            data[ticker] = found_link
-        else:
-            data = {ticker: found_link}
-        with open("marketscreener_links.json", "w") as f:
-            json.dump(data, f)
+        with JSON_LOCK:
+            if os.path.exists("marketscreener_links.json"):
+                with open("marketscreener_links.json", "r") as f:
+                    data = json.load(f)
+                data[ticker] = found_link
+            else:
+                data = {ticker: found_link}
+
+            with open("marketscreener_links.json", "w") as f:
+                json.dump(data, f)
 
     return found_link
 
@@ -312,7 +317,7 @@ def get_revenue_by_region(ticker, url):
     return df[str(latest_year)].to_dict()
 
 
-def get_revenue_forecasts(url, target_value):
+def get_revenue_forecasts(url):
     page = requests.get(url + "finances/", headers=headers)
     soup = BeautifulSoup(page.content, features="lxml")
     for div in soup.find_all("div", {"class": "card card--collapsible mb-15"}):
@@ -519,7 +524,7 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     # operating_margin_this_year = ttm_income_statement["Operating Income"].sum() / revenues
     operating_margin_this_year = ticker.info.get("operatingMargins", ttm_income_statement["Operating Income"].sum() / revenues)
 
-    revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, op_margin_change_next_year = get_revenue_forecasts(marketscreener_url, operating_margin_this_year)
+    revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, op_margin_change_next_year = get_revenue_forecasts(marketscreener_url)
     operating_margin_next_year = operating_margin_this_year * (1 + op_margin_change_next_year)
     target_pre_tax_operating_margin = max(target_pre_tax_operating_margin, operating_margin_next_year)
     year_of_convergence_for_margin = 5
@@ -571,11 +576,12 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
 
 
 def main():
-    url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt"
-    response = requests.get(url)
-    file_content = response.text
-    tickers = file_content.split("\n")
-    print("Number of tickers:", len(tickers))
+    # url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt"
+    # response = requests.get(url)
+    # file_content = response.text
+    # tickers = file_content.split("\n")
+    # print("Number of tickers:", len(tickers))
+    tickers = ["AAPL", "MSFT", "NVDA"]
     country_erps = get_country_erp()
     region_mapper = StringMapper(list(country_erps.keys()))
     avg_metrics = get_industry_avgs()
@@ -599,11 +605,11 @@ def main():
             futures.append(future)
 
         for future in concurrent.futures.as_completed(futures):
-            try:
-                future.result()
-            except Exception as e:
-                num_errors += 1
-                print(f"[ERROR] {e}")
+            # try:
+            future.result()
+        # except Exception as e:
+        #     num_errors += 1
+        #     print(f"[ERROR] {e}")
 
     print(f"Number of errors: {num_errors}")
     # Write all constants to the database
@@ -629,10 +635,6 @@ def process_ticker(ticker, country_erps, region_mapper, avg_metrics, industry_ma
     dcf_inputs = json.dumps(dcf_inputs, cls=CustomEncoder)
     dcf_inputs = json.loads(dcf_inputs)
     db.update_one({"Ticker": ticker}, {"$set": dcf_inputs}, upsert=True)
-
-
-# except Exception as e:
-#     return f"[ERROR] {ticker} - {e}"
 
 
 if __name__ == "__main__":

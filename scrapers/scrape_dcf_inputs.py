@@ -475,7 +475,7 @@ def r_and_d_handler(ticker, industry):
 
 def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper, avg_metrics: dict, industry_mapper: StringMapper, mature_erp: float, risk_free_rate: float, fx_rates: dict):
     # Defaults
-    average_maturity = 0
+    average_maturity = 5
     marginal_tax_rate = 0.21
     value_of_options = 0
 

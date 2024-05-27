@@ -577,12 +577,11 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
 
 
 def main():
-    # url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt"
-    # response = requests.get(url)
-    # file_content = response.text
-    # tickers = file_content.split("\n")
-    # print("Number of tickers:", len(tickers))
-    tickers = ["NVDA"]
+    url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt"
+    response = requests.get(url)
+    file_content = response.text
+    tickers = file_content.split("\n")
+    print("Number of tickers:", len(tickers))
     country_erps = get_country_erp()
     region_mapper = StringMapper(list(country_erps.keys()))
     avg_metrics = get_industry_avgs()

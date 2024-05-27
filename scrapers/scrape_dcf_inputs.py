@@ -337,8 +337,8 @@ def get_revenue_forecasts(url):
             growth = indiv.pct_change(axis=1)
             revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate = growth.values[0][1], growth.values[0, 1:].mean()
             op_margins = income_statement.loc[["Operating Margin"]].iloc[:, curr_year_index:].apply(lambda x: x.str.replace("%", "").astype(float) / 100)
-            op_margin_change_next_year = op_margins[[str(curr_year + 1), str(curr_year + 2)]].pct_change(axis=1).values[0][1]  # MarketScreener has some inconsistencies of EBIT values versus yahoo finance
-            return revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, op_margin_change_next_year
+            op_margin_next_year = op_margins[[str(curr_year + 2)]].iloc[0].values[0]  # MarketScreener has some inconsistencies of EBIT values versus yahoo finance
+            return revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, op_margin_next_year
 
 
 def get_similar_stocks(ticker: str):
@@ -525,9 +525,8 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     # operating_margin_this_year = ttm_income_statement["Operating Income"].sum() / revenues
     operating_margin_this_year = ticker.info.get("operatingMargins", ttm_income_statement["Operating Income"].sum() / revenues)
 
-    revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, op_margin_change_next_year = get_revenue_forecasts(marketscreener_url)
-    operating_margin_next_year = operating_margin_this_year * (1 + op_margin_change_next_year)
-    operating_margin_next_year = min(operating_margin_next_year, 0.7)
+    revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, operating_margin_next_year = get_revenue_forecasts(marketscreener_url)
+    operating_margin_next_year = max(operating_margin_next_year, operating_margin_this_year)
     target_pre_tax_operating_margin = max(target_pre_tax_operating_margin, operating_margin_next_year)
     year_of_convergence_for_margin = 5
     years_of_high_growth = 5
@@ -578,11 +577,12 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
 
 
 def main():
-    url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt"
-    response = requests.get(url)
-    file_content = response.text
-    tickers = file_content.split("\n")
-    print("Number of tickers:", len(tickers))
+    # url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt"
+    # response = requests.get(url)
+    # file_content = response.text
+    # tickers = file_content.split("\n")
+    # print("Number of tickers:", len(tickers))
+    tickers = ["NVDA"]
     country_erps = get_country_erp()
     region_mapper = StringMapper(list(country_erps.keys()))
     avg_metrics = get_industry_avgs()
@@ -607,10 +607,9 @@ def main():
 
         for future in concurrent.futures.as_completed(futures):
             # try:
-            future.result()
-        # except Exception as e:
-        #     num_errors += 1
-        #     print(f"[ERROR] {e}")
+            r = future.result()
+            if not r:
+                num_errors += 1
 
     print(f"Number of errors: {num_errors}")
     # Write all constants to the database
@@ -637,8 +636,10 @@ def process_ticker(ticker, country_erps, region_mapper, avg_metrics, industry_ma
         dcf_inputs = json.dumps(dcf_inputs, cls=CustomEncoder)
         dcf_inputs = json.loads(dcf_inputs)
         db.update_one({"Ticker": ticker}, {"$set": dcf_inputs}, upsert=True)
+        return True
     except Exception as e:
         print(f"[ERROR] {e}")
+        return False
 
 
 if __name__ == "__main__":

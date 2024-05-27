@@ -68,8 +68,6 @@ def get_marketscreener_links(tickers):
                     link = row.find("a", href=True)["href"]
                     links[ticker] = "https://www.marketscreener.com" + link + "finances/"
                     break
-    with open("marketscreener_links.json", "r") as f:
-        links = json.load(f)
 
     return links
 

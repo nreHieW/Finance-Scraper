@@ -477,9 +477,9 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
 
     ticker = yf.Ticker(ticker)
     q_income_statement = ticker.quarterly_income_stmt
-    ttm_income_statement = q_income_statement[q_income_statement.columns[:4]].T
+    ttm_income_statement = q_income_statement[q_income_statement.columns[:4]].T.fillna(0)
     last_balance_sheet = ticker.quarterly_balance_sheet
-    last_balance_sheet = last_balance_sheet[last_balance_sheet.columns[:4]].T
+    last_balance_sheet = last_balance_sheet[last_balance_sheet.columns[:4]].T.fillna(method="ffill")
     info = ticker.info
     name = info.get("longName")
     curr_currency = info.get("financialCurrency")

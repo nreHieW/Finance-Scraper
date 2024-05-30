@@ -479,7 +479,7 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     q_income_statement = ticker.quarterly_income_stmt
     ttm_income_statement = q_income_statement[q_income_statement.columns[:4]].T.fillna(0)
     last_balance_sheet = ticker.quarterly_balance_sheet
-    last_balance_sheet = last_balance_sheet[last_balance_sheet.columns[:4]].T.fillna(method="ffill")
+    last_balance_sheet = last_balance_sheet[last_balance_sheet.columns[:4]].T.fillna(method="ffill").fillna(method="bfill")
     info = ticker.info
     name = info.get("longName")
     curr_currency = info.get("financialCurrency")
@@ -573,11 +573,12 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
 
 
 def main():
-    url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt"
-    response = requests.get(url)
-    file_content = response.text
-    tickers = file_content.split("\n")
-    print("Number of tickers:", len(tickers))
+    # url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/all/all_tickers.txt"
+    # response = requests.get(url)
+    # file_content = response.text
+    # tickers = file_content.split("\n")
+    # print("Number of tickers:", len(tickers))
+    tickers = ["DE"]
     country_erps = get_country_erp()
     region_mapper = StringMapper(list(country_erps.keys()))
     avg_metrics = get_industry_avgs()

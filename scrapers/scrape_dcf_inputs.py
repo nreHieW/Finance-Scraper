@@ -25,11 +25,43 @@ warnings.filterwarnings("ignore")
 headers = {"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36"}
 
 MAX_WORKERS = 120
-CURRENCIES = {"ARS", "AUD", "BRL", "CAD", "CHF", "CLP", "CNY", "COP", "DKK", "EUR", "GBP", "HKD", "IDR", "ILS", "INR", "JPY", "KRW", "KZT", "MXN", "MYR", "PEN", "PHP", "SEK", "SGD", "TRY", "TWD", "USD", "VND", "ZAR"}
+CURRENCIES = {
+    "ARS",
+    "AUD",
+    "BRL",
+    "CAD",
+    "CHF",
+    "CLP",
+    "CNY",
+    "COP",
+    "DKK",
+    "EUR",
+    "GBP",
+    "HKD",
+    "IDR",
+    "ILS",
+    "INR",
+    "JPY",
+    "KRW",
+    "KZT",
+    "MXN",
+    "MYR",
+    "PEN",
+    "PHP",
+    "SEK",
+    "SGD",
+    "TRY",
+    "TWD",
+    "USD",
+    "VND",
+    "ZAR",
+}
 
 
 def setup_proxies():
-    response = requests.get("https://www.sslproxies.org/", headers={"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36"})
+    response = requests.get(
+        "https://www.sslproxies.org/", headers={"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36"}
+    )
 
     proxies = []
     soup = BeautifulSoup(response.text, "html.parser")
@@ -169,7 +201,8 @@ def get_10year_tbill():
 def get_mature_erp():
     url = "https://pages.stern.nyu.edu/~adamodar/pc/implprem/ERPbymonth.xlsx"
     page = requests.get(url, verify=False)
-    return pd.read_excel(page.content)["ERP (T12m)"].iloc[-1]
+    out = pd.read_excel(page.content)["ERP (T12m)"].iloc[-1]
+    return float(out.strip("%")) / 100
 
 
 def synthetic_rating(market_cap, operating_income, interest_expense):
@@ -224,7 +257,25 @@ def synthetic_rating(market_cap, operating_income, interest_expense):
     if operating_income < 0:
         rating = "BB"
         spread = rating_mapping[7][3]
-    default_prob = {"AAA": 0.70, "AA": 0.72, "A+": 0.72, "A": 1.24, "A-": 1.24, "BBB": 3.32, "BB+": 3.32, "BB": 11.78, "B+": 11.79, "B": 23.74, "B-": 23.75, "CCC": 50.38, "CC": 50.38, "C": 50.38, "D": 50.38}[rating] / 100  # in percentages
+    default_prob = {
+        "AAA": 0.70,
+        "AA": 0.72,
+        "A+": 0.72,
+        "A": 1.24,
+        "A-": 1.24,
+        "BBB": 3.32,
+        "BB+": 3.32,
+        "BB": 11.78,
+        "B+": 11.79,
+        "B": 23.74,
+        "B-": 23.75,
+        "CCC": 50.38,
+        "CC": 50.38,
+        "C": 50.38,
+        "D": 50.38,
+    }[
+        rating
+    ] / 100  # in percentages
     spread = float(s.replace("%", "")) / 100
     return rating, spread, default_prob
 
@@ -315,11 +366,12 @@ def get_revenue_by_region(ticker, url):
 
 
 def get_revenue_forecasts(url):
+
     page = requests.get(url + "finances/", headers=headers)
     soup = BeautifulSoup(page.content, features="lxml")
     for div in soup.find_all("div", {"class": "card card--collapsible mb-15"}):
         header_text = div.find("div", {"class": "card-header"}).text.lower()
-        if "income statement" in header_text and "annual" in header_text:
+        if "income statement" in header_text:
             income_statement = pd.read_html(str(div.find("table")))[0]
             income_statement = income_statement.dropna(axis=1, how="all")
             income_statement.iloc[:, 0] = income_statement.iloc[:, 0].str.replace(r"\d", "", regex=True)
@@ -332,7 +384,9 @@ def get_revenue_forecasts(url):
             indiv = indiv.iloc[:, curr_year_index:].astype(float)
             growth = indiv.pct_change(axis=1)
             revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate = growth.values[0][1], growth.values[0, 1:].mean()
-            op_margins = income_statement.loc[["Operating Margin"]].iloc[:, curr_year_index:].apply(lambda x: x.str.replace("%", "").astype(float) / 100)
+            ebit = income_statement.loc[["EBIT"]].iloc[:, curr_year_index:].apply(lambda x: int(x))
+
+            op_margins = ebit / indiv
             op_margin_next_year = op_margins[[str(curr_year + 2)]].iloc[0].values[0]  # MarketScreener has some inconsistencies of EBIT values versus yahoo finance
             return revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, op_margin_next_year
 
@@ -502,7 +556,9 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
     minority_interest = last_balance_sheet.get("Minority Interest", pd.Series([0])).iloc[0]  # by right. should convert to market value
     number_of_shares_outstanding = info.get("sharesOutstanding", 0)
     curr_price = info.get("previousClose", 0)
-    effective_tax_rate = (ttm_income_statement.get("Tax Rate For Calcs", pd.Series([0])) * ttm_income_statement.get("Pretax Income", pd.Series([0]))).sum() / ttm_income_statement.get("Pretax Income", pd.Series([1])).sum()
+    effective_tax_rate = (ttm_income_statement.get("Tax Rate For Calcs", pd.Series([0])) * ttm_income_statement.get("Pretax Income", pd.Series([0]))).sum() / ttm_income_statement.get(
+        "Pretax Income", pd.Series([1])
+    ).sum()
 
     regions = region_mapper.get_closest(info["country"])
 
@@ -513,12 +569,13 @@ def get_dcf_inputs(ticker: str, country_erps: dict, region_mapper: StringMapper,
 
     regional_revenues = get_revenue_by_region(info["symbol"], marketscreener_url)
     equity_risk_premium, mapped_regional_revenues = get_regional_crps(regional_revenues, region_mapper, country_erps)
+
     equity_risk_premium = equity_risk_premium + mature_erp
     _, company_spread, prob_of_failure = synthetic_rating(info["marketCap"], ttm_income_statement["Operating Income"].sum(), interest_expense)
     pre_tax_cost_of_debt = risk_free_rate + company_spread + country_erps[regions[0]]
 
     target_pre_tax_operating_margin = avg_metrics["Pre-tax Operating Margin (Unadjusted)"][industry]
-    # operating_margin_this_year = ttm_income_statement["Operating Income"].sum() / revenues
+
     operating_margin_this_year = ticker.info.get("operatingMargins", ttm_income_statement["Operating Income"].sum() / revenues)
 
     revenue_growth_rate_next_year, compounded_annual_revenue_growth_rate, operating_margin_next_year = get_revenue_forecasts(marketscreener_url)
@@ -634,7 +691,6 @@ def process_ticker(ticker, country_erps, region_mapper, avg_metrics, industry_ma
         db.update_one({"Ticker": ticker}, {"$set": dcf_inputs}, upsert=True)
         return True
     except Exception as e:
-        print(f"[ERROR] {e}")
         return False
 
 
